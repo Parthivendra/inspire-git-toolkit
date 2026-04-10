@@ -2,13 +2,15 @@
 # ================================================================
 #  Inspire - Git Dev Toolkit
 #  Source this file in your .bashrc / .zshrc:
-#    source /path/to/_ps_toolkit.sh
+#    source ~/.local/share/inspire-git-toolkit.sh
 #
 #  Functions:
 #    gs   — Pretty git status
 #    gq   — Manual quick commit (with conventional-commit validation)
 #    gqa  — Smart automated commit (change analysis + split modes)
 #    gl   — Pretty git log (last 10)
+#
+#  All functions support -h / --help for usage information.
 #
 #  Requirements: Bash 4+, Git
 # ================================================================
@@ -17,9 +19,9 @@
 [[ -n "$_INSPIRE_TOOLKIT_LOADED" ]] && return 0
 _INSPIRE_TOOLKIT_LOADED=1
 
-# ── Bash version guard (required for associative arrays in gqa) ──
+# ── Bash version guard ──
 if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
-    echo "[ps-toolkit] ⚠️  Bash 4+ required (you have ${BASH_VERSION})."
+    echo -e "${YELLOW}Warning: Bash 4+ required (you have ${BASH_VERSION}).${RESET}"
     echo "             macOS users: brew install bash"
     return 1
 fi
@@ -39,20 +41,40 @@ RESET='\033[0m'
 #  gs — Pretty Git Status
 # ================================================================
 gs() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo -e ""
+        echo -e "${BOLD}${BLUE}gs${RESET} — Pretty Git Status"
+        echo -e "────────────────────────────────────────"
+        echo -e "${BOLD}Usage:${RESET}"
+        echo -e "   gs"
+        echo -e ""
+        echo -e "${BOLD}Description:${RESET}"
+        echo -e "   Displays the current branch and a concise git status."
+        echo -e "   Shows a clean message if the working tree is clean,"
+        echo -e "   otherwise prints a short-format diff summary."
+        echo -e ""
+        echo -e "${BOLD}Options:${RESET}"
+        echo -e "   ${CYAN}-h, --help${RESET}   Show this help message and exit."
+        echo -e ""
+        echo -e "${BOLD}Examples:${RESET}"
+        echo -e "   ${GREEN}gs${RESET}            # Show status of current repo"
+        echo -e ""
+        return 0
+    fi
+
     if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️  Not a git repository.${RESET}"
+        echo -e "${YELLOW}Warning: Not a git repository.${RESET}"
         return 1
     fi
 
     local branch
     branch=$(git branch --show-current 2>/dev/null)
 
-    # Detached HEAD: show the short SHA instead
     if [[ -z "$branch" ]]; then
         branch="(detached HEAD @ $(git rev-parse --short HEAD 2>/dev/null))"
     fi
 
-    echo -e "${BLUE}📂 Branch:${RESET} ${BOLD}$branch${RESET}"
+    echo -e "${BLUE}📂 Branch:${RESET} ${BOLD}${branch}${RESET}"
     echo "────────────────────────────────────────"
 
     if [[ -z "$(git status --porcelain)" ]]; then
@@ -69,6 +91,48 @@ gs() {
 #  Usage: gq "feat: add login form"
 # ================================================================
 gq() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo -e ""
+        echo -e "${BOLD}${BLUE}gq${RESET} — Manual Quick Commit"
+        echo -e "────────────────────────────────────────"
+        echo -e "${BOLD}Usage:${RESET}"
+        echo -e "   gq \"<type>: <description>\""
+        echo -e ""
+        echo -e "${BOLD}Description:${RESET}"
+        echo -e "   Stages all changes, validates a conventional commit message,"
+        echo -e "   commits, and pushes to the current branch's remote."
+        echo -e ""
+        echo -e "${BOLD}Options:${RESET}"
+        echo -e "   ${CYAN}-h, --help${RESET}   Show this help message and exit."
+        echo -e ""
+        echo -e "${BOLD}Commit Types:${RESET}"
+        echo -e "   ${CYAN}feat${RESET}      A new feature"
+        echo -e "   ${CYAN}fix${RESET}       A bug fix"
+        echo -e "   ${CYAN}docs${RESET}      Documentation changes only"
+        echo -e "   ${CYAN}style${RESET}     Formatting, whitespace (no logic change)"
+        echo -e "   ${CYAN}refactor${RESET}  Code restructuring (no feature/fix)"
+        echo -e "   ${CYAN}test${RESET}      Adding or updating tests"
+        echo -e "   ${CYAN}chore${RESET}     Build process, tooling, maintenance"
+        echo -e "   ${CYAN}perf${RESET}      Performance improvements"
+        echo -e "   ${CYAN}build${RESET}     Build system or dependency changes"
+        echo -e "   ${CYAN}ci${RESET}        CI/CD configuration changes"
+        echo -e "   ${CYAN}revert${RESET}    Reverting a previous commit"
+        echo -e ""
+        echo -e "${BOLD}Validation Rules:${RESET}"
+        echo -e "   • Must match pattern:  ${YELLOW}<type>: <description>${RESET}"
+        echo -e "   • Description must be at least 10 characters"
+        echo -e "   • Vague single-word descriptions are rejected"
+        echo -e "     (e.g. update, changes, fix, minor, misc, wip, temp)"
+        echo -e ""
+        echo -e "${BOLD}Examples:${RESET}"
+        echo -e "   ${GREEN}gq \"feat: add user login form with validation\"${RESET}"
+        echo -e "   ${GREEN}gq \"fix: resolve null pointer in auth middleware\"${RESET}"
+        echo -e "   ${GREEN}gq \"docs: update README with setup instructions\"${RESET}"
+        echo -e "   ${GREEN}gq \"chore: update dependencies to latest versions\"${RESET}"
+        echo -e ""
+        return 0
+    fi
+
     if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         echo -e "${RED}❌ Not inside a git repository.${RESET}"
         return 1
@@ -133,19 +197,82 @@ gq() {
 #  Never asks for commit message confirmation — no _prompt_message.
 #
 #  Usage:
-#    gqa      → smart mode (auto or interactive based on complexity)
-#    gqa -f   → force mode (bypasses ALL safety checks, pushes instantly)
+#    gqa              → smart mode (auto or interactive based on complexity)
+#    gqa -f           → force mode (bypasses ALL safety checks, pushes instantly)
+#    gqa [-n|--dry-run] → dry-run mode (shows what would happen, no git writes)
+#    gqa [-h|--help]  → show this help message
 # ================================================================
 gqa() {
 
+    # ── Help check (must come before other flag parsing) ─────────
+    for arg in "$@"; do
+        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+            echo -e ""
+            echo -e "${BOLD}${BLUE}gqa${RESET} — Smart Automated Commit"
+            echo -e "────────────────────────────────────────"
+            echo -e "${BOLD}Usage:${RESET}"
+            echo -e "   gqa [options]"
+            echo -e ""
+            echo -e "${BOLD}Description:${RESET}"
+            echo -e "   Analyzes all uncommitted changes, groups them by module and"
+            echo -e "   file type, generates conventional commit messages automatically,"
+            echo -e "   and pushes to the current branch."
+            echo -e ""
+            echo -e "   In smart mode, gqa decides the commit strategy based on:"
+            echo -e "   • Number of changed files"
+            echo -e "   • Number of distinct top-level modules (directories)"
+            echo -e "   • File risk level (source code vs config vs docs)"
+            echo -e ""
+            echo -e "${BOLD}Options:${RESET}"
+            echo -e "   ${CYAN}-f${RESET}              Force mode — bypasses ALL safety checks and"
+            echo -e "                   complexity analysis. Commits everything in one"
+            echo -e "                   shot with a generic chore message and pushes."
+            echo -e "                   ${YELLOW}Use with caution.${RESET}"
+            echo -e ""
+            echo -e "   ${CYAN}-n, --dry-run${RESET}   Dry-run mode — performs the full analysis and"
+            echo -e "                   shows exactly what would be staged, committed,"
+            echo -e "                   and pushed — without writing anything to git."
+            echo -e "                   Safe to use anytime for a preview."
+            echo -e ""
+            echo -e "   ${CYAN}-h, --help${RESET}      Show this help message and exit."
+            echo -e ""
+            echo -e "${BOLD}Decision Engine (priority order):${RESET}"
+            echo -e "   ${GREEN}Auto-commit${RESET}   Single file, all low-risk files, or single module"
+            echo -e "   ${YELLOW}Interactive${RESET}   Multiple modules or file types — choose single"
+            echo -e "                   commit or split by module / file type"
+            echo -e "   ${RED}Hard stop${RESET}     >4 modules, high-risk source files, >8 files —"
+            echo -e "                   too complex for a single automated message"
+            echo -e ""
+            echo -e "${BOLD}Commit Message Format:${RESET}"
+            echo -e "   Messages are generated automatically using conventional commits:"
+            echo -e "   ${CYAN}feat${RESET}   — pure additions (new files only)"
+            echo -e "   ${CYAN}fix${RESET}    — pure modifications (existing files updated)"
+            echo -e "   ${CYAN}chore${RESET}  — deletions, renames, or mixed operations"
+            echo -e ""
+            echo -e "   Tagged with ${CYAN}[gqa]${RESET} (auto) or ${CYAN}[split:gqa]${RESET} (per-module split)."
+            echo -e "   Force mode tags with ${CYAN}[force:gqa]${RESET}."
+            echo -e ""
+            echo -e "${BOLD}Examples:${RESET}"
+            echo -e "   ${GREEN}gqa${RESET}             # Smart commit — auto or interactive"
+            echo -e "   ${GREEN}gqa -n${RESET}          # Preview what gqa would do (no writes)"
+            echo -e "   ${GREEN}gqa --dry-run${RESET}   # Same as above"
+            echo -e "   ${GREEN}gqa -f${RESET}          # Force-commit everything immediately"
+            echo -e "   ${GREEN}gqa -f -n${RESET}       # Preview a force commit without writing"
+            echo -e ""
+            return 0
+        fi
+    done
+
     # ── Flag parsing ─────────────────────────────────────────────
     local FORCE=0
+    local DRY_RUN=0
     while [[ "$1" == -* ]]; do
         case "$1" in
             -f) FORCE=1 ;;
+            -n|--dry-run) DRY_RUN=1 ;;
             *)
                 echo -e "${RED}❌ Unknown flag: $1${RESET}"
-                echo "   Usage: gqa [-f]"
+                echo "   Usage: gqa [-f] [-n|--dry-run] [-h|--help]"
                 return 1
                 ;;
         esac
@@ -405,12 +532,21 @@ gqa() {
         local filelist="$1"
         while IFS= read -r f; do
             [[ -z "$f" ]] && continue
-            git add -- "$f" || echo -e "${YELLOW}⚠️  Could not stage: $f (skipped)${RESET}"
+            if [[ "$DRY_RUN" -eq 1 ]]; then
+                echo -e "   ${CYAN}[dry-run]${RESET} would stage: $f"
+            else
+                git add -- "$f" || echo -e "${YELLOW}⚠️  Could not stage: $f (skipped)${RESET}"
+            fi
         done <<< "$filelist"
     }
 
     _do_commit() {
         local msg="$1"
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo -e "   ${CYAN}[dry-run]${RESET} would commit: $msg"
+            commit_messages+=("$msg")
+            return 0
+        fi
         if git diff --cached --quiet; then
             echo -e "${YELLOW}⚠️  Nothing staged for this commit — skipping.${RESET}"
             return 0
@@ -455,6 +591,11 @@ gqa() {
         case "$sc" in A) (( total_a++ )) ;; M) (( total_m++ )) ;; D) (( total_d++ )) ;; esac
     done
 
+    # ── Dry-run banner ───────────────────────────────────────────
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo -e "${CYAN}ℹ️  DRY-RUN MODE — no git writes will occur.${RESET}"
+    fi
+
     # ── Force mode ───────────────────────────────────────────────
     # Placed here so $file_count and op totals are fully available.
     if [[ "$FORCE" -eq 1 ]]; then
@@ -464,11 +605,17 @@ gqa() {
         [[ "$total_d" -gt 0 ]] && summary="${summary:+$summary + }removed"
         echo -e "${RED}⚠️  FORCE MODE ACTIVE — Bypassing safety checks.${RESET}"
         local force_msg="chore: force commit $file_count files ($summary) [force:gqa]"
-        git add .
-        git commit -m "$force_msg" || { echo -e "${RED}❌ Commit failed.${RESET}"; return 1; }
-        git push -u origin "$branch" || { echo -e "${RED}❌ Push failed.${RESET}"; return 1; }
-        echo -e "${GREEN}🚀 Force pushed to ${BOLD}$branch${RESET}"
-        echo -e "   ${CYAN}↳${RESET} $force_msg"
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo -e "   ${CYAN}[dry-run]${RESET} would git add ."
+            echo -e "   ${CYAN}[dry-run]${RESET} would commit: $force_msg"
+            echo -e "   ${CYAN}[dry-run]${RESET} would push to $branch"
+        else
+            git add .
+            git commit -m "$force_msg" || { echo -e "${RED}❌ Commit failed.${RESET}"; return 1; }
+            git push -u origin "$branch" || { echo -e "${RED}❌ Push failed.${RESET}"; return 1; }
+            echo -e "${GREEN}🚀 Force pushed to ${BOLD}$branch${RESET}"
+            echo -e "   ${CYAN}↳${RESET} $force_msg"
+        fi
         return 0
     fi
 
@@ -507,7 +654,11 @@ gqa() {
             "$only_mod" "$only_file" "[gqa]")
         echo -e "${GREEN}✅ Single file — auto-committing.${RESET}"
         echo -e "   ${CYAN}↳${RESET} $default_msg"
-        git add .
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo -e "   ${CYAN}[dry-run]${RESET} would git add ."
+        else
+            git add .
+        fi
         _do_commit "$default_msg" || return 1
 
     # ── STEP 3: All files are low-risk ───────────────────────────
@@ -517,7 +668,11 @@ gqa() {
         default_msg=$(_build_msg "$total_a" "$total_m" "$total_d" "0" "" "$all_filelist" "[gqa]")
         echo -e "${GREEN}✅ Low-risk files only — auto-committing.${RESET}"
         echo -e "   ${CYAN}↳${RESET} $default_msg"
-        git add .
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo -e "   ${CYAN}[dry-run]${RESET} would git add ."
+        else
+            git add .
+        fi
         _do_commit "$default_msg" || return 1
 
     # ── STEP 4: Single module, focused ───────────────────────────
@@ -529,7 +684,11 @@ gqa() {
             "$only_mod" "$all_filelist" "[gqa]")
         echo -e "${GREEN}✅ Single module — auto-committing.${RESET}"
         echo -e "   ${CYAN}↳${RESET} $default_msg"
-        git add .
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo -e "   ${CYAN}[dry-run]${RESET} would git add ."
+        else
+            git add .
+        fi
         _do_commit "$default_msg" || return 1
 
     # ── STEP 5: (multi-module auto-commit removed) ───────────────
@@ -565,6 +724,10 @@ gqa() {
             echo "    [2] Split by module"
             echo ""
             read -rp "  Enter choice (1/2): " choice
+            while [[ "$choice" != "1" && "$choice" != "2" ]]; do
+                echo -e "${YELLOW}Invalid choice. Please type 1 or 2.${RESET}"
+                read -rp "  Enter choice (1/2): " choice
+            done
 
             if [[ "$choice" == "2" ]]; then
                 for key in "${!module_files[@]}"; do
@@ -587,7 +750,11 @@ gqa() {
                 echo ""
                 echo -e "  ${BOLD}📦 Staging & committing all files...${RESET}"
                 echo -e "   ${CYAN}↳${RESET} $default_msg"
-                git add .
+                if [[ "$DRY_RUN" -eq 1 ]]; then
+                    echo -e "   ${CYAN}[dry-run]${RESET} would git add ."
+                else
+                    git add .
+                fi
                 _do_commit "$default_msg" || return 1
             fi
         else
@@ -596,6 +763,10 @@ gqa() {
             echo "    [2] Split by file type"
             echo ""
             read -rp "  Enter choice (1/2): " choice
+            while [[ "$choice" != "1" && "$choice" != "2" ]]; do
+                echo -e "${YELLOW}Invalid choice. Please type 1 or 2.${RESET}"
+                read -rp "  Enter choice (1/2): " choice
+            done
 
             if [[ "$choice" == "2" ]]; then
                 for key in "${!type_files[@]}"; do
@@ -617,7 +788,11 @@ gqa() {
                 echo ""
                 echo -e "  ${BOLD}📦 Staging & committing all files...${RESET}"
                 echo -e "   ${CYAN}↳${RESET} $default_msg"
-                git add .
+                if [[ "$DRY_RUN" -eq 1 ]]; then
+                    echo -e "   ${CYAN}[dry-run]${RESET} would git add ."
+                else
+                    git add .
+                fi
                 _do_commit "$default_msg" || return 1
             fi
         fi
@@ -626,6 +801,25 @@ gqa() {
     # ── Push (always automatic — no confirmation prompt) ─────────
     if [[ ${#commit_messages[@]} -eq 0 ]]; then
         echo -e "\n${YELLOW}⚠️  No commits were made.${RESET}"
+        return 0
+    fi
+
+    # ── Remote origin check ──────────────────────────────────────
+    if ! git remote get-url origin > /dev/null 2>&1; then
+        echo -e "\n${YELLOW}⚠️  No remote 'origin' found — skipping push.${RESET}"
+        echo -e "   Add one with: git remote add origin <url>"
+        echo -e "\n${GREEN}✅ ${#commit_messages[@]} commit(s) made locally on ${BOLD}$branch${RESET}"
+        for msg in "${commit_messages[@]}"; do
+            echo -e "   ${CYAN}✔${RESET}  $msg"
+        done
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo -e "\n${CYAN}[dry-run]${RESET} would push ${#commit_messages[@]} commit(s) to ${BOLD}$branch${RESET}"
+        for msg in "${commit_messages[@]}"; do
+            echo -e "   ${CYAN}✔${RESET}  $msg"
+        done
         return 0
     fi
 
@@ -644,6 +838,26 @@ gqa() {
 #  gl — Pretty Git Log (last 10 commits)
 # ================================================================
 gl() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo -e ""
+        echo -e "${BOLD}${BLUE}gl${RESET} — Pretty Git Log"
+        echo -e "────────────────────────────────────────"
+        echo -e "${BOLD}Usage:${RESET}"
+        echo -e "   gl"
+        echo -e ""
+        echo -e "${BOLD}Description:${RESET}"
+        echo -e "   Displays the last 10 commits as a compact, decorated graph."
+        echo -e "   Output includes branch pointers, tags, and merge topology."
+        echo -e ""
+        echo -e "${BOLD}Options:${RESET}"
+        echo -e "   ${CYAN}-h, --help${RESET}   Show this help message and exit."
+        echo -e ""
+        echo -e "${BOLD}Examples:${RESET}"
+        echo -e "   ${GREEN}gl${RESET}            # Show last 10 commits with graph"
+        echo -e ""
+        return 0
+    fi
+
     if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         echo -e "${YELLOW}⚠️  Not a git repository.${RESET}"
         return 1
@@ -651,3 +865,29 @@ gl() {
     git log --oneline --graph --decorate -10
 }
 
+igt() {
+    case "$1" in
+        update)
+            echo -e "${CYAN}🔄 Updating Inspire Git Toolkit...${RESET}"
+            curl -fsSL https://raw.githubusercontent.com/parthivendra/inspire-git-toolkit/main/install.sh | bash
+            ;;
+
+        uninstall)
+            echo -e "${RED}🧹 Uninstalling Inspire Git Toolkit...${RESET}"
+            curl -fsSL https://raw.githubusercontent.com/parthivendra/inspire-git-toolkit/main/install.sh | bash -s -- --uninstall
+            ;;
+
+        version)
+            echo "Inspire Git Toolkit v1.1.0"
+            ;;
+
+        *)
+            echo -e "${BOLD}${BLUE}igt${RESET} — Inspire Git Toolkit CLI"
+            echo "────────────────────────────────────"
+            echo "Usage:"
+            echo "  igt update"
+            echo "  igt uninstall"
+            echo "  igt version"
+            ;;
+    esac
+}

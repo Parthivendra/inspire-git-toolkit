@@ -72,3 +72,37 @@ PRs welcome! Especially:
 
 Made with ❤️ by [Parthivendra](https://github.com/parthivendra)
 
+---
+
+## Bonus: Workspace Quick-Jump Pattern
+
+Many developers like to combine navigation + environment activation + git status in one command.
+
+Here’s the pattern I personally use (you can copy and adapt it):
+
+```bash
+# ================================================================
+#  Custom Workspace Shortcuts
+#  Add these to you inspire-git-toolkit.sh
+# ================================================================
+
+# Example: Jump to a project, activate conda env, and show git status
+myproject() {
+    local target="/path/to/your/project/folder"   # ← Change this to your path
+
+    if [[ ! -d "$target" ]]; then
+        echo -e "${RED}❌ Directory not found: $$   target   $${RESET}"
+        return 1
+    fi
+
+    cd "$target" || return 1
+
+    # Activate conda environment if it has the same name as the function
+    conda activate myproject 2>/dev/null || true
+
+    # Show pretty git status using the toolkit
+    gs
+
+    echo ""
+    echo -e "$$   {GREEN}🚀 Workspace ready. Build something meaningful.   $${RESET}"
+}
